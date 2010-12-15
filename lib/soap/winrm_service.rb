@@ -24,29 +24,31 @@ module WinRM
     class WinRMWebService < Handsoap::Service
       include SOAP
 
-      @@raw_soap = false
+      endpoint :uri => true, :version => 2
 
-      def initialize()
-        if $DEBUG
+      def initialize(uri, opts={})
+        @uri = uri || raise(ArgumentError.new("URI is required per instance"))
+
+        if opts[:debug] == true
           @debug = File.new('winrm_debug.out', 'w')
           @debug.sync = true
         end
       end
 
-      def self.set_auth(user,pass)
-        @@user = user
-        @@pass = pass
+      def set_auth(user,pass)
+        @user = user
+        @pass = pass
         true
       end
 
-      def self.set_ca_trust_path(file_or_dir)
-        @@ca_trust_store = file_or_dir
+      def set_ca_trust_path(file_or_dir)
+        @ca_trust_store = file_or_dir
         true
       end
 
       # Turn off parsing and just return the soap response
-      def self.raw_soap!
-        @@raw_soap = true
+      def raw_soap!
+        @raw_soap = true
       end
 
 
@@ -100,9 +102,9 @@ module WinRM
       end
 
       def on_after_create_http_request(req)
-        req.set_auth @@user, @@pass
+        req.set_auth @user, @pass
         req.set_header('Content-Type','application/soap+xml;charset=UTF-8')
-        req.set_trust_ca_file(@@ca_trust_store) if defined?(@@ca_trust_store)
+        req.set_trust_ca_file(@ca_trust_store) if defined?(@ca_trust_store)
         #puts "SOAP DOCUMENT=\n#{req.body}"
       end
 
@@ -339,7 +341,7 @@ module WinRM
       end
 
       def parse!(response, opts = {})
-        return response if @@raw_soap
+        return response if @raw_soap
         #EwsParser.new(response).parse(opts)
       end
 

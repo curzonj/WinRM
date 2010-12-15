@@ -44,25 +44,23 @@ module WinRM
     # @param [Integer] version The SOAP version to use.  This defaults to 1
     #   and you should not need to pass this parameter.
     def self.endpoint=(endpoint, version = 2)
-      @@endpoint = endpoint
-      SOAP::WinRMWebService.endpoint(:uri => endpoint, :version => version)
+      @endpoint = endpoint
     end
 
     # Fetch the current endpoint
     def self.endpoint
-      @@endpoint
+      @endpoint
     end
 
     # Set the SOAP username and password.
     # @param [String] user The user name
     # @param [String] pass The password
     def self.set_auth(user,pass)
-      @@user = user
-      SOAP::WinRMWebService.set_auth(user,pass)
+      winrm.set_auth(user,pass)
     end
 
     def self.set_ca_trust_path(path)
-      SOAP::WinRMWebService.set_ca_trust_path(path)
+      winrm.set_ca_trust_path(path)
     end
 
     # Set the http driver that the SOAP back-end will use.
@@ -72,27 +70,27 @@ module WinRM
       Handsoap.http_driver = driver
     end
 
-    def initialize
-      @winrm = SOAP::WinRMWebService.new
+    def winrm
+      @winrm ||= SOAP::WinRMWebService.new(@endpoint)
     end
 
     # Run a CMD command
     # @see WinRM::SOAP::WinRMWebService#run_cmd
     def cmd(command)
-      @winrm.run_cmd(command)
+      winrm.run_cmd(command)
     end
 
     # Run a Powershell script
     # @see WinRM::SOAP::WinRMWebService#run_powershell_script
     def powershell(script_file)
-      @winrm.run_powershell_script(script_file)
+      winrm.run_powershell_script(script_file)
     end
 
     # Run a WQL Query
     # @see WinRM::SOAP::WinRMWebService#run_wql
     # @see http://msdn.microsoft.com/en-us/library/aa394606(VS.85).aspx
     def wql(wql)
-      @winrm.run_wql(wql)
+      winrm.run_wql(wql)
     end
 
   end # class WinRM
