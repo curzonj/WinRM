@@ -63,8 +63,13 @@ module WinRM
         doc.alias NS_WIN_SHELL,  'http://schemas.microsoft.com/wbem/wsman/1/windows/shell'
         doc.alias NS_CIMBINDING, 'http://schemas.dmtf.org/wbem/wsman/1/cimbinding.xsd'
 
+        if @transient_namespaces
+          @transient_namespaces.each {|k,v| doc.alias k ,v }
+          @transient_namespaces = nil
+        end
+
         header = doc.find('Header')
-        header.add("#{NS_ADDRESSING}:To", WinRMWebService.uri)
+        header.add("#{NS_ADDRESSING}:To", @uri)
         header.add("#{NS_ADDRESSING}:ReplyTo") {|rto|
           rto.add("#{NS_ADDRESSING}:Address",'http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous') {|addr|
             addr.set_attr('mustUnderstand','true')
@@ -262,13 +267,52 @@ module WinRM
         command_output
       end
 
+      def request_namespaces(namespaces)
+        @transient_namespaces = namespaces
+      end
+
+      def wmi_method(action, resource, selectors={})
+        ns = 'ivk' # Arbitrary. Short for invoke, that's the WinRM term for this operation
+        resource = "root/cimv2/#{resource}" unless resource =~ /\//
+        resource = "http://schemas.microsoft.com/wbem/wsman/1/wmi/#{resource}"
+        action = "#{resource}/#{action}"
+
+        request_namespaces ns => resource
+
+        # MS represents the selectors as query string parameters, ie:
+        # Win32_System?Name=win32time
+        selectors = selectors.map do |k,v|
+          {"#{NS_WSMAN_DMTF}:Selector" => {:name => k, :text => v}}
+        end
+
+        header = {
+          "#{NS_WSMAN_DMTF}:ResourceURI" => {'mustUnderstand' => 'true', :text => resource },
+          "#{NS_WSMAN_DMTF}:SelectorSet" => selectors,
+          "#{NS_ADDRESSING}:Action" => {'mustUnderstand' => 'true', :text => action }
+        }
+
+        resp = invoke("#{ns}:RunDetails", :soap_header => header) do |node|
+          yield node, ns if block_given?
+        end
+
+        selection =  resp.xpath("//p:ReturnValue", 'p' => resource)
+        node = selection.first
+
+        # If the user gave a resource name that works but doesn't match
+        # exactly what Windows uses, then it won't match the namespace used
+        # in the response document and we can't find the return value node.
+        warn "Resource namespace not found in output --- #{resp.document}" if node.nil?
+
+        node
+      end
+
 
       # Run a WQL Query
       # @see http://msdn.microsoft.com/en-us/library/aa394606(VS.85).aspx
       # @param [String] wql The WQL query
       # @return [Array<Hash>] Returns an array of Hashes that contain the key/value pairs returned from the query.
-      def run_wql(wql)
-        header = {}.merge(resource_uri_wmi).merge(action_enumerate)
+      def run_wql(wql, namespace=nil)
+        header = {}.merge(resource_uri_wmi(namespace)).merge(action_enumerate)
 
         begin
           resp = invoke("#{NS_ENUM}:Enumerate", {:soap_action => :auto, :http_options => nil, :soap_header => header}) do |enum|
@@ -352,7 +396,8 @@ module WinRM
         {"#{NS_WSMAN_DMTF}:ResourceURI" => {'mustUnderstand' => 'true', :text => 'http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd'}}
       end
 
-      def resource_uri_wmi(namespace = 'root/cimv2/*')
+      def resource_uri_wmi(namespace=nil)
+        namespace ||= 'root/cimv2/*'
         {"#{NS_WSMAN_DMTF}:ResourceURI" => {'mustUnderstand' => 'true', :text => "http://schemas.microsoft.com/wbem/wsman/1/wmi/#{namespace}"}}
       end
 
