@@ -63,11 +63,6 @@ module WinRM
         doc.alias NS_WIN_SHELL,  'http://schemas.microsoft.com/wbem/wsman/1/windows/shell'
         doc.alias NS_CIMBINDING, 'http://schemas.dmtf.org/wbem/wsman/1/cimbinding.xsd'
 
-        if @transient_namespaces
-          @transient_namespaces.each {|k,v| doc.alias k ,v }
-          @transient_namespaces = nil
-        end
-
         header = doc.find('Header')
         header.add("#{NS_ADDRESSING}:To", @uri)
         header.add("#{NS_ADDRESSING}:ReplyTo") {|rto|
@@ -267,17 +262,10 @@ module WinRM
         command_output
       end
 
-      def request_namespaces(namespaces)
-        @transient_namespaces = namespaces
-      end
-
       def wmi_method(action, resource, selectors={})
-        ns = 'ivk' # Arbitrary. Short for invoke, that's the WinRM term for this operation
         resource = "root/cimv2/#{resource}" unless resource =~ /\//
         resource = "http://schemas.microsoft.com/wbem/wsman/1/wmi/#{resource}"
-        action = "#{resource}/#{action}"
-
-        request_namespaces ns => resource
+        action_uri = "#{resource}/#{action}"
 
         # MS represents the selectors as query string parameters, ie:
         # Win32_System?Name=win32time
@@ -288,11 +276,12 @@ module WinRM
         header = {
           "#{NS_WSMAN_DMTF}:ResourceURI" => {'mustUnderstand' => 'true', :text => resource },
           "#{NS_WSMAN_DMTF}:SelectorSet" => selectors,
-          "#{NS_ADDRESSING}:Action" => {'mustUnderstand' => 'true', :text => action }
+          "#{NS_ADDRESSING}:Action" => {'mustUnderstand' => 'true', :text => action_uri }
         }
 
-        resp = invoke("#{ns}:RunDetails", :soap_header => header) do |node|
-          yield node, ns if block_given?
+        resp = invoke("p:#{action}_INPUT", :soap_header => header) do |node|
+          node.set_attr('xmlns:p',resource)
+          yield node if block_given?
         end
 
         selection =  resp.xpath("//p:ReturnValue", 'p' => resource)
