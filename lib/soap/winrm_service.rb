@@ -245,6 +245,10 @@ module WinRM
       # @return [Hash] :stdout and :stderr
       def run_powershell_script(script_file)
         script = File.read(script_file)
+        run_powershell_cmd(script)
+      end
+
+      def run_powershell_cmd(script)
         script = script.chars.to_a.join("\x00").chomp
         if(defined?(script.encode))
           script = script.encode('ASCII-8BIT')
